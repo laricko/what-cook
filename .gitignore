@@ -1,0 +1,11 @@
+.venv/
+
+__pycache__/
+.idea/
+postgres_data/
+
+*.pyc
+
+backup.backup
+
+*.csv

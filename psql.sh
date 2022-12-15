@@ -1,0 +1,1 @@
+docker exec -it cook_db psql -U postgres

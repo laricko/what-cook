@@ -1,0 +1,29 @@
+version: "3"
+services:
+  db:
+    image: postgres:14.1
+    env_file:
+      development.env
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    expose:
+      - 5432
+    container_name: cook_db
+
+  backend:
+    restart: always
+    stdin_open: true
+    tty: true
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes: 
+      - ./src:/app
+    container_name: cook_backend
+    env_file:
+      development.env
+    depends_on:
+      - db
+
