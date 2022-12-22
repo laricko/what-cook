@@ -10,8 +10,10 @@ fastapi = "*"
 sqlalchemy = "*"
 psycopg2-binary = "*"
 uvicorn = "*"
-pydantic = "*"
+pydantic = {extras = ["email"], version = "*"}
 asyncpg = "*"
+python-jose = {extras = ["cryptography"], version = "*"}
+passlib = "*"
 
 [dev-packages]
 

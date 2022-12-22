@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Table
 
-from .base import metadata
+from db.base import metadata
 
 
 ingredient = Table(

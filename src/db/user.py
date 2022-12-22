@@ -1,12 +1,12 @@
 from sqlalchemy import Column, Integer, String, Table
 
-from .base import metadata
+from db.base import metadata
 
 
 users = Table(
-    "user",
+    "users",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("login", String(63), unique=True),
-    Column("password", String(31)),
+    Column("email", String(63), unique=True),
+    Column("password", String(63)),
 )

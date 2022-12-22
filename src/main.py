@@ -2,6 +2,7 @@ from uvicorn import run
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+
 from core.config import (
     SITE_PORT,
     SITE_HOST,
@@ -28,4 +29,3 @@ if __name__ == "__main__":
         reload=True,
         forwarded_allow_ips="*",
     )
-
