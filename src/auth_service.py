@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 from datetime import datetime, timedelta
 
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -9,7 +9,7 @@ from jose import jwt
 from sqlalchemy import select
 
 from db.base import database
-from db.user import users
+from db.user import user as user_db
 from core.config import JWT_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
 from models.user import User
 
@@ -58,6 +58,12 @@ class JWTBearer(HTTPBearer):
 
 
 async def get_current_user(data: str = Depends(JWTBearer())) -> User:
-    query = select(users).where(users.c.email == data.get("sub"))
+    query = select(user_db).where(user_db.c.email == data.get("sub"))
     user = await database.fetch_one(query)
     return User.parse_obj(user)
+
+
+async def get_current_user_is_verified(
+    user: User = Depends(get_current_user),
+) -> Union[None, User]:
+    return user.verified and user

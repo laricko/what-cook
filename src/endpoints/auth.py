@@ -1,22 +1,18 @@
 from asyncio import create_task
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, validator, EmailStr
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 
 from db.base import database, engine
-from db.user import users
-from auth_service import (
-    hash_password,
-    verify_passwrod,
-    create_access_token,
-    get_current_user,
-    JWTBearer,
-)
-from models.user import User
+from db.user import user as user_db, token as token_db
+from auth_service import hash_password, verify_passwrod, create_access_token
+from models.user import User, UserLoginResponse
+from utils.send_mail import send_email
 
 
-auth_router = APIRouter()
+auth_router = APIRouter(tags=["auth"])
 
 
 class RegisterData(BaseModel):
@@ -26,7 +22,7 @@ class RegisterData(BaseModel):
 
     @validator("email")
     def check_email_not_exist(cls, v):
-        query = select(users).where(users.c.email == v)
+        query = select(user_db).where(user_db.c.email == v)
         with engine.connect() as con:
             rows = con.execute(query)
             user = rows.fetchone()
@@ -46,17 +42,19 @@ class LoginData(BaseModel):
     password: str
 
 
-class UserLoginResponse(User):
-    token: str
-
-
 @auth_router.post("/register")
 async def register(data: RegisterData):
     data_as_dict = data.dict()
     data_as_dict.pop("confirm_password")
     data_as_dict["password"] = hash_password(data.password)
-    query = insert(users).values(**data_as_dict)
+    query = insert(user_db).values(**data_as_dict)
+    user_id = await create_task(database.execute(query))
+    random_token = str(uuid4())
+    query = insert(token_db).values(user_id=user_id, value=random_token)
     await create_task(database.execute(query))
+    url = f"http://localhost:8000/api/verify-email?token={random_token}"
+    await create_task(send_email("Подтверждение", data.email, url))
+    data_as_dict.pop("password")
     return data_as_dict
 
 
@@ -65,7 +63,7 @@ async def login(data: LoginData):
     exc = HTTPException(
         status.HTTP_403_FORBIDDEN, "There is no user with such email and password"
     )
-    query = select(users).where(users.c.email == data.email)
+    query = select(user_db).where(user_db.c.email == data.email)
     user = await database.fetch_one(query)
     if not user:
         raise exc
@@ -77,9 +75,17 @@ async def login(data: LoginData):
     return UserLoginResponse.parse_obj(user_as_dict)
 
 
-user_router = APIRouter()
+verification_router = APIRouter(tags=["verification"])
 
 
-@user_router.get("/self-user")
-async def self_user(user: str = Depends(get_current_user)):
+@verification_router.get("/verify-email")
+async def verify_email(token: str):
+    query = select(token_db).where(token_db.c.value == token)
+    token_instance = await database.fetch_one(query)
+    query = (
+        update(user_db)
+        .where(user_db.c.id == token_instance.user_id)
+        .values(verified=True)
+    )
+    user = await database.execute(query)
     return user
