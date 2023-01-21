@@ -11,7 +11,7 @@ from sqlalchemy import select
 from db.base import database
 from db.user import user as user_db
 from core.config import JWT_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
-from models.user import User
+from schemas.user import User
 
 
 password_context = CryptContext("bcrypt", deprecated="auto")

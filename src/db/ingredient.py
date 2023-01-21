@@ -5,7 +5,6 @@ from sqlalchemy import (
     ForeignKey,
     Table,
     SmallInteger,
-    CheckConstraint,
     UniqueConstraint,
 )
 
@@ -32,7 +31,9 @@ kitchen_ingredient = Table(
     Column(
         "user_id", Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     ),
-    Column("weight", Integer), # Use constraint ck_kitchen_ingredient_weight_positive
-    Column("count", SmallInteger), # Use constraint ck_kitchen_ingredient_count_positive
+    Column("weight", Integer),  # Use constraint ck_kitchen_ingredient_weight_positive
+    Column(
+        "count", SmallInteger
+    ),  # Use constraint ck_kitchen_ingredient_count_positive
     UniqueConstraint("user_id", "ingredient_id", name="uix_1"),
 )

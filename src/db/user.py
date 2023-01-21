@@ -8,7 +8,7 @@ user = Table(
     metadata,
     Column("id", Integer, primary_key=True),
     Column("email", String(63), unique=True),
-    Column("password", String(63)),
+    Column("password", String(63), nullable=False),
     Column("verified", Boolean, server_default="f"),
 )
 

@@ -6,27 +6,27 @@ from sqlalchemy import select, insert, delete, update, and_
 from pydantic import BaseModel, validator, parse_obj_as
 from asyncpg.exceptions import ForeignKeyViolationError
 
-from models.user import User
-from models.ingredient import Ingredient, KitchenIngredient
+from schemas.user import User
+from schemas.ingredient import Ingredient, KitchenIngredient
 from db import ingredient, kitchen_ingredient
 from db.base import database
-from auth_service import get_current_user_is_verified, get_current_user
+from auth_services import get_current_user_is_verified, get_current_user
 
 
-ingredients_router = APIRouter(tags=["ingedients"])
+ingredients_router = APIRouter(prefix="/ingredients", tags=["ingedients"])
 
 
-@ingredients_router.get("/ingredients", response_model=List[Ingredient])
-async def ingredients(
-    user: User = Depends(get_current_user), title: Optional[str] = None
-):
+@ingredients_router.get(
+    "/", response_model=List[Ingredient], dependencies=[Depends(get_current_user)]
+)
+async def ingredients(title: Optional[str] = None):
     filter = [ingredient.c.title.ilike(f"%{title}%")] if title is not None else []
     query = select(ingredient).where(*filter)
     ingredients = await database.fetch_all(query)
     return parse_obj_as(List[Ingredient], ingredients)
 
 
-class AddToMyKitchenData(BaseModel):
+class SetCountKitchenIngredientData(BaseModel):
     weight: Optional[int]
     count: Optional[int]
 
@@ -37,10 +37,13 @@ class AddToMyKitchenData(BaseModel):
         return v
 
 
-@ingredients_router.post("/ingedients/{ingredient_id}/set-count-kitchen-ingredient")
+@ingredients_router.post(
+    "/{ingredient_id}/set-count-kitchen-ingredient",
+    response_class=SetCountKitchenIngredientData,
+)
 async def set_count_kitchen_ingredient(
     ingredient_id: int,
-    data: AddToMyKitchenData,
+    data: SetCountKitchenIngredientData,
     user: User = Depends(get_current_user_is_verified),
 ):
     if data.weight in (None, 0) and data.count in (None, 0):
@@ -76,7 +79,7 @@ async def set_count_kitchen_ingredient(
     return data
 
 
-@ingredients_router.get("/ingredients/my")
+@ingredients_router.get("/my", response_model=List[KitchenIngredient])
 async def my_ingredients(user: User = Depends(get_current_user_is_verified)):
     query = (
         select(kitchen_ingredient, ingredient)
@@ -91,7 +94,7 @@ async def my_ingredients(user: User = Depends(get_current_user_is_verified)):
     return parse_obj_as(List[KitchenIngredient], k_ingredients)
 
 
-@ingredients_router.post("/ingredients/clear")
+@ingredients_router.post("/clear")
 async def clear_my_ingredients(user: User = Depends(get_current_user_is_verified)):
     query = delete(kitchen_ingredient).where(kitchen_ingredient.c.user_id == user.id)
     return await database.execute(query)
