@@ -7,9 +7,9 @@ recipe = Table(
     "recipe",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("title", String(255), unique=True),
-    Column("description", String(255)),
-    Column("public", Boolean, server_default="f"),
+    Column("title", String(255), unique=True, nullable=False),
+    Column("description", String(255), nullable=False),
+    Column("public", Boolean, server_default="f", nullable=False),
     Column("author_id", ForeignKey("user.id", ondelete="CASCADE"), nullable=False),
 )
 

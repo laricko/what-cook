@@ -15,7 +15,7 @@ ingredient = Table(
     "ingredient",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("title", String(31), unique=True),
+    Column("title", String(31), unique=True, nullable=False),
 )
 
 kitchen_ingredient = Table(
