@@ -57,16 +57,14 @@ base_recipe_query = (
 @recipes_router.get("/my", response_model=List[Recipe])
 async def my_recipes(user: User = Depends(get_current_user_is_verified)):
     query = base_recipe_query.where(recipe.c.author_id == user.id)
-    recipes = session.execute(query).fetchall()
-    return parse_obj_as(List[Recipe], recipes)
+    return session.execute(query).fetchall()
 
 
-@recipes_router.get("/")
+@recipes_router.get("/", response_model=List[Recipe])
 async def recipes(title: Optional[str] = None):
     filter = [recipe.c.title.ilike(f"%{title}%")] if title is not None else []
     query = base_recipe_query.where(*filter, recipe.c.public == True)
-    recipes = session.execute(query).fetchall()
-    return parse_obj_as(List[Recipe], recipes)
+    return session.execute(query).fetchall()
 
 
 class AddIngredientsData(BaseModel):
