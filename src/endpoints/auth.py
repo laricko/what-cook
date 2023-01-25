@@ -1,11 +1,10 @@
-from asyncio import create_task
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, validator, EmailStr
 from sqlalchemy import insert, select, update
 
-from db.base import database, engine
+from db.base import database, session
 from db.user import user as user_db, token as token_db
 from auth_services import hash_password, verify_passwrod, create_access_token
 from schemas.user import UserLoginResponse
@@ -22,12 +21,9 @@ class RegisterData(BaseModel):
 
     @validator("email")
     def check_email_not_exist(cls, v):
-        query = select(user_db).where(user_db.c.email == v)
-        with engine.connect() as con:
-            rows = con.execute(query)
-            user = rows.fetchone()
-            if user:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, "email already exists")
+        email = session.query(user_db.c.email).filter_by(email=v).first()
+        if email:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "email already exists")
         return v
 
     @validator("confirm_password")
@@ -48,17 +44,17 @@ async def register(data: RegisterData):
     data_as_dict.pop("confirm_password")
     data_as_dict["password"] = hash_password(data.password)
     query = insert(user_db).values(**data_as_dict)
-    user_id = await create_task(database.execute(query))
+    user_id = await database.execute(query)
     random_token = str(uuid4())
     query = insert(token_db).values(user_id=user_id, value=random_token)
-    await create_task(database.execute(query))
+    await database.execute(query)
     url = f"http://localhost:8000/api/verify-email?token={random_token}" # TODO: сделать функцию
-    await create_task(send_email("Подтверждение", data.email, url))
+    send_email("Подтверждение", data.email, url)
     data_as_dict.pop("password")
     return data_as_dict
 
 
-@auth_router.post("/login", response_class=UserLoginResponse)
+@auth_router.post("/login", response_model=UserLoginResponse)
 async def login(data: LoginData):
     exc = HTTPException(
         status.HTTP_403_FORBIDDEN, "There is no user with such email and password"
@@ -93,5 +89,5 @@ async def verify_email(token: str):
         .where(user_db.c.id == token_instance.user_id)
         .values(verified=True)
     )
-    await create_task(database.execute(query_to_make_user_verified))
+    await database.execute(query_to_make_user_verified)
     return {"detail": "success"}

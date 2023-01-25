@@ -1,16 +1,15 @@
-from asyncio import create_task
 from typing import Optional, List
+from asyncio import gather
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, insert, func
 from pydantic import BaseModel, validator, parse_obj_as
-from sqlalchemy.dialects.postgresql import aggregate_order_by
 
 from auth_services import get_current_user_is_verified
 from utils.get_fields_for_json_build_object import get_fields_for_json_build_object
 from schemas.user import User
 from schemas.recipe import Recipe
-from db.base import database, engine, session
+from db.base import database, session
 from db import recipe, step, recipe_ingredient, user as user_table, ingredient
 
 
@@ -21,6 +20,7 @@ recipes_router = APIRouter(
 )
 
 
+# With this query you can use only session to execute query because aiopsycopg has issue
 base_recipe_query = (
     select(
         [
@@ -80,6 +80,15 @@ class AddIngredientsData(BaseModel):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "only positive fields")
         return v
 
+    @validator("ingredient_id")
+    def check_ingredient_exist(cls, v):
+        ing = session.query(ingredient.c.id).filter_by(id=v).first()
+        if not ing:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "ingredient with such id does not exist"
+            )
+        return v
+
 
 class AddStepsData(BaseModel):
     description: str
@@ -93,34 +102,36 @@ class CreateRecipeData(BaseModel):
 
     @validator("title")
     def validate_title_is_unique(cls, v):
-        query = select(recipe).where(recipe.c.title == v)
-        with engine.connect() as con:
-            rows = con.execute(query)
-            recipe_obj = rows.fetchone()
-            if recipe_obj:
-                raise HTTPException(
-                    status.HTTP_400_BAD_REQUEST, "recipe already exists"
-                )
+        recipe_obj = session.query(recipe.c.title).filter_by(title=v)
+        if recipe_obj:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "recipe already exists")
         return v
 
 
-@recipes_router.post("/")
+@recipes_router.post(
+    "/",
+    response_model=CreateRecipeData,
+    description="Steps will numerate by order as you pass",
+)
 async def create_recipe(
     data: CreateRecipeData, user: User = Depends(get_current_user_is_verified)
 ):
+    # Create base recipe to get id
     query_to_create_recipe = insert(recipe).values(
         title=data.title, description=data.description, author_id=user.id
     )
-    recipe_id = await create_task(database.execute(query_to_create_recipe))
+    recipe_id = await database.execute(query_to_create_recipe)
     ingredients = [
         {**ingredient.dict(), "recipe_id": recipe_id} for ingredient in data.ingredients
     ]
     query_to_set_ingredients = insert(recipe_ingredient).values(ingredients)
-    await create_task(database.execute(query_to_set_ingredients))
     steps = [
         {**step.dict(), "recipe_id": recipe_id, "order": num}
         for num, step in enumerate(data.steps, 1)
     ]
     query_to_set_steps = insert(step).values(steps)
-    await create_task(database.execute(query_to_set_steps))
+    # Executing background commits for recipe
+    set_ingredients = database.execute(query_to_set_ingredients)
+    set_steps = database.execute(query_to_set_steps)
+    await gather(set_ingredients, set_steps)
     return data

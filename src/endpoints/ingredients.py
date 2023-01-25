@@ -1,29 +1,26 @@
-from typing import Optional, List
+from typing import Optional, List, Union
 from asyncio import create_task
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, insert, delete, update, and_
-from pydantic import BaseModel, validator, parse_obj_as
-from asyncpg.exceptions import ForeignKeyViolationError
+from sqlalchemy import select, insert, delete, update, and_, func
+from pydantic import BaseModel, validator
 
 from schemas.user import User
 from schemas.ingredient import Ingredient, KitchenIngredient
 from db import ingredient, kitchen_ingredient
-from db.base import database
-from auth_services import get_current_user_is_verified, get_current_user
+from db.base import database, session
+from auth_services import get_current_user_is_verified
+from utils.get_fields_for_json_build_object import get_fields_for_json_build_object
 
 
 ingredients_router = APIRouter(prefix="/ingredients", tags=["ingedients"])
 
 
-@ingredients_router.get(
-    "/", response_model=List[Ingredient], dependencies=[Depends(get_current_user)]
-)
+@ingredients_router.get("/", response_model=List[Ingredient])
 async def ingredients(title: Optional[str] = None):
     filter = [ingredient.c.title.ilike(f"%{title}%")] if title is not None else []
     query = select(ingredient).where(*filter)
-    ingredients = await database.fetch_all(query)
-    return parse_obj_as(List[Ingredient], ingredients)
+    return await database.fetch_all(query)
 
 
 class SetCountKitchenIngredientData(BaseModel):
@@ -37,26 +34,36 @@ class SetCountKitchenIngredientData(BaseModel):
         return v
 
 
+async def check_ingredient_exist(ingredient_id: int) -> Union[None, int]:
+    query = select(ingredient.c.id).where(ingredient.c.id == ingredient_id)
+    ing = await database.fetch_one(query)
+    if not ing:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Ingredient with such id does not exists"
+        )
+    return ingredient_id
+
+
 @ingredients_router.post(
     "/{ingredient_id}/set-count-kitchen-ingredient",
-    response_class=SetCountKitchenIngredientData,
+    response_model=SetCountKitchenIngredientData,
 )
 async def set_count_kitchen_ingredient(
-    ingredient_id: int,
     data: SetCountKitchenIngredientData,
+    ingredient_id: int = Depends(check_ingredient_exist),
     user: User = Depends(get_current_user_is_verified),
 ):
     if data.weight in (None, 0) and data.count in (None, 0):
-        query = delete(kitchen_ingredient).where(
+        query_to_delete = delete(kitchen_ingredient).where(
             and_(
                 kitchen_ingredient.c.user_id == user.id,
                 kitchen_ingredient.c.ingredient_id == ingredient_id,
             )
         )
-        await create_task(database.execute(query))
+        await create_task(database.execute(query_to_delete))
         return data
     inserting_data = dict(**data.dict(), user_id=user.id, ingredient_id=ingredient_id)
-    query = (
+    query_to_update = (
         update(kitchen_ingredient)
         .where(
             and_(
@@ -67,22 +74,22 @@ async def set_count_kitchen_ingredient(
         .values(**inserting_data)
         .returning(kitchen_ingredient.c.id)
     )
-    result = await create_task(database.execute(query))
+    result = await database.execute(query_to_update)
     if not result:
-        query = insert(kitchen_ingredient).values(**inserting_data)
-        try:
-            await create_task(database.execute(query))
-        except ForeignKeyViolationError:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, "Ingredient with such id does not exists"
-            )
+        query_to_create = insert(kitchen_ingredient).values(**inserting_data)
+        await create_task(database.execute(query_to_create))
     return data
 
 
 @ingredients_router.get("/my", response_model=List[KitchenIngredient])
 async def my_ingredients(user: User = Depends(get_current_user_is_verified)):
     query = (
-        select(kitchen_ingredient, ingredient)
+        select(
+            kitchen_ingredient,
+            func.jsonb_build_object(
+                *get_fields_for_json_build_object(ingredient)
+            ).label("ingredient"),
+        )
         .where(kitchen_ingredient.c.user_id == user.id)
         .join(
             ingredient,
@@ -90,11 +97,11 @@ async def my_ingredients(user: User = Depends(get_current_user_is_verified)):
             isouter=True,
         )
     )
-    k_ingredients = await database.fetch_all(query)
-    return parse_obj_as(List[KitchenIngredient], k_ingredients)
+    return session.execute(query).fetchall()
 
 
 @ingredients_router.post("/clear")
 async def clear_my_ingredients(user: User = Depends(get_current_user_is_verified)):
     query = delete(kitchen_ingredient).where(kitchen_ingredient.c.user_id == user.id)
-    return await database.execute(query)
+    await create_task(database.execute(query))
+    return {"detail": "success"}

@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from db.base import database
 from db.user import user as user_db
-from core.config import JWT_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+from config import JWT_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
 from schemas.user import User
 
 

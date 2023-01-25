@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
-from core.config import (
+from config import (
     SITE_PORT,
     SITE_HOST,
     PROJECT_TITLE,
