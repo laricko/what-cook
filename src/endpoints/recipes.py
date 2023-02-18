@@ -1,11 +1,10 @@
-from typing import Optional, List
-from asyncio import gather
+from asyncio import gather, create_task
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, insert, func
-from pydantic import BaseModel, validator, parse_obj_as
+from pydantic import BaseModel, validator
 
-from auth_services import get_current_user_is_verified
+from utils.auth_services import get_current_user_is_verified
 from utils.get_fields_for_json_build_object import get_fields_for_json_build_object
 from schemas.user import User
 from schemas.recipe import Recipe
@@ -54,14 +53,14 @@ base_recipe_query = (
 )
 
 
-@recipes_router.get("/my", response_model=List[Recipe])
+@recipes_router.get("/my", response_model=list[Recipe])
 async def my_recipes(user: User = Depends(get_current_user_is_verified)):
     query = base_recipe_query.where(recipe.c.author_id == user.id)
     return session.execute(query).fetchall()
 
 
-@recipes_router.get("/", response_model=List[Recipe])
-async def recipes(title: Optional[str] = None):
+@recipes_router.get("/", response_model=list[Recipe])
+async def recipes(title: None | str = None):
     filter = [recipe.c.title.ilike(f"%{title}%")] if title is not None else []
     query = base_recipe_query.where(*filter, recipe.c.public == True)
     return session.execute(query).fetchall()
@@ -69,8 +68,8 @@ async def recipes(title: Optional[str] = None):
 
 class AddIngredientsData(BaseModel):
     ingredient_id: int
-    weight: Optional[int]
-    count: Optional[int]
+    weight: None | int
+    count: None | int
 
     @validator("weight", "count")
     def check_weight_and_count_positive(cls, v):
@@ -95,8 +94,8 @@ class AddStepsData(BaseModel):
 class CreateRecipeData(BaseModel):
     title: str
     description: str
-    ingredients: List[AddIngredientsData]
-    steps: List[AddStepsData]
+    ingredients: list[AddIngredientsData]
+    steps: list[AddStepsData]
 
     @validator("title")
     def validate_title_is_unique(cls, v):
@@ -129,7 +128,7 @@ async def create_recipe(
     ]
     query_to_set_steps = insert(step).values(steps)
     # Executing background commits for recipe
-    set_ingredients = database.execute(query_to_set_ingredients)
-    set_steps = database.execute(query_to_set_steps)
+    set_ingredients = create_task(database.execute(query_to_set_ingredients))
+    set_steps = create_task(database.execute(query_to_set_steps))
     await gather(set_ingredients, set_steps)
     return data

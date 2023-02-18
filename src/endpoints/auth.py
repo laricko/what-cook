@@ -6,7 +6,7 @@ from sqlalchemy import insert, select, update
 
 from db.base import database, session
 from db.user import user as user_db, token as token_db
-from auth_services import hash_password, verify_passwrod, create_access_token
+from utils.auth_services import hash_password, verify_passwrod, create_access_token
 from schemas.user import UserLoginResponse
 from utils.send_mail import send_email
 

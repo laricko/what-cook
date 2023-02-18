@@ -1,4 +1,3 @@
-from typing import Optional, List, Union
 from asyncio import create_task
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,23 +8,23 @@ from schemas.user import User
 from schemas.ingredient import Ingredient, KitchenIngredient
 from db import ingredient, kitchen_ingredient
 from db.base import database, session
-from auth_services import get_current_user_is_verified
+from utils.auth_services import get_current_user_is_verified
 from utils.get_fields_for_json_build_object import get_fields_for_json_build_object
 
 
 ingredients_router = APIRouter(prefix="/ingredients", tags=["ingedients"])
 
 
-@ingredients_router.get("/", response_model=List[Ingredient])
-async def ingredients(title: Optional[str] = None):
+@ingredients_router.get("/", response_model=list[Ingredient])
+async def ingredients(title: None | str = None):
     filter = [ingredient.c.title.ilike(f"%{title}%")] if title is not None else []
     query = select(ingredient).where(*filter)
     return await database.fetch_all(query)
 
 
 class SetCountKitchenIngredientData(BaseModel):
-    weight: Optional[int]
-    count: Optional[int]
+    weight: None | int
+    count: None | int
 
     @validator("weight", "count")
     def check_weight_and_count_positive(cls, v):
@@ -34,7 +33,7 @@ class SetCountKitchenIngredientData(BaseModel):
         return v
 
 
-async def check_ingredient_exist(ingredient_id: int) -> Union[None, int]:
+async def check_ingredient_exist(ingredient_id: int) -> int:
     query = select(ingredient.c.id).where(ingredient.c.id == ingredient_id)
     ing = await database.fetch_one(query)
     if not ing:
@@ -53,6 +52,7 @@ async def set_count_kitchen_ingredient(
     ingredient_id: int = Depends(check_ingredient_exist),
     user: User = Depends(get_current_user_is_verified),
 ):
+    # If weight = 0 or data = 0 we delete ingredient from user's kitchen
     if data.weight in (None, 0) and data.count in (None, 0):
         query_to_delete = delete(kitchen_ingredient).where(
             and_(
@@ -62,6 +62,7 @@ async def set_count_kitchen_ingredient(
         )
         await create_task(database.execute(query_to_delete))
         return data
+    # else we update existing ingredient in user's kitchen. setting count or weight
     inserting_data = dict(**data.dict(), user_id=user.id, ingredient_id=ingredient_id)
     query_to_update = (
         update(kitchen_ingredient)
@@ -74,6 +75,7 @@ async def set_count_kitchen_ingredient(
         .values(**inserting_data)
         .returning(kitchen_ingredient.c.id)
     )
+    # if nothing updated - we create ingredient in user's kitchen
     result = await database.execute(query_to_update)
     if not result:
         query_to_create = insert(kitchen_ingredient).values(**inserting_data)
@@ -81,7 +83,7 @@ async def set_count_kitchen_ingredient(
     return data
 
 
-@ingredients_router.get("/my", response_model=List[KitchenIngredient])
+@ingredients_router.get("/my", response_model=list[KitchenIngredient])
 async def my_ingredients(user: User = Depends(get_current_user_is_verified)):
     query = (
         select(

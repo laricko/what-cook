@@ -1,4 +1,3 @@
-from typing import Optional, Union
 from datetime import datetime, timedelta
 
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -46,9 +45,7 @@ class JWTBearer(HTTPBearer):
     def __init__(self, *args, auto_eror: bool = True, **kwargs):
         super().__init__(*args, auto_error=auto_eror, **kwargs)
 
-    async def __call__(
-        self, request: Request
-    ) -> Optional[HTTPAuthorizationCredentials]:
+    async def __call__(self, request: Request) -> HTTPAuthorizationCredentials:
         credentials = await super().__call__(request)
         if not credentials:
             raise invalid_token_exception
@@ -69,7 +66,7 @@ async def get_current_user(data: str = Depends(JWTBearer())) -> User:
 
 async def get_current_user_is_verified(
     user: User = Depends(get_current_user),
-) -> Union[None, User]:
+) -> User:
     if not user.verified:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "You must verify your email")
     return user
