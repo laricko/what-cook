@@ -1,6 +1,4 @@
-from typing import List, Optional
-
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel
 
 from schemas.ingredient import Ingredient
 
@@ -13,8 +11,8 @@ class Step(BaseModel):
 
 class RecipeIngredient(BaseModel):
     ingredient: Ingredient
-    weight: Optional[int]
-    count: Optional[int]
+    weight: None | int
+    count: None | int
 
 
 class Recipe(BaseModel):
@@ -22,5 +20,5 @@ class Recipe(BaseModel):
     title: str
     description: str
     public: bool
-    steps: List[Step]
-    recipe_ingredients: List[RecipeIngredient]
+    steps: list[Step]
+    recipe_ingredients: list[RecipeIngredient]
