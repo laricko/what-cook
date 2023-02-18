@@ -1,4 +1,4 @@
-from uuid import uuid4
+from asyncio import create_task
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, validator, EmailStr
@@ -8,7 +8,7 @@ from db.base import database, session
 from db.user import user as user_db, token as token_db
 from utils.auth_services import hash_password, verify_passwrod, create_access_token
 from schemas.user import UserLoginResponse
-from utils.send_mail import send_email
+from utils.send_email_verification import send_email_verification
 
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
@@ -40,18 +40,12 @@ class LoginData(BaseModel):
 
 @auth_router.post("/register")
 async def register(data: RegisterData):
-    data_as_dict = data.dict()
-    data_as_dict.pop("confirm_password")
-    data_as_dict["password"] = hash_password(data.password)
-    query = insert(user_db).values(**data_as_dict)
+    query = insert(user_db).values(
+        email=data.email, password=hash_password(data.password)
+    )
     user_id = await database.execute(query)
-    random_token = str(uuid4())
-    query = insert(token_db).values(user_id=user_id, value=random_token)
-    await database.execute(query)
-    url = f"http://localhost:8000/api/verify-email?token={random_token}" # TODO: сделать функцию
-    send_email("Подтверждение", data.email, url)
-    data_as_dict.pop("password")
-    return data_as_dict
+    await create_task(send_email_verification(user_id, data.email))
+    return data
 
 
 @auth_router.post("/login", response_model=UserLoginResponse)
