@@ -1,8 +1,6 @@
 # What and go cook
 
-The last public version. Now this repository is archived. 
-
-But developing still in progres.
+Development suspended. Because this idea already implemented https://www.supercook.com/
 
 ### Start
 
